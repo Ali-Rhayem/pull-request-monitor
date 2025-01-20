@@ -26,18 +26,31 @@ class GithubApiService
         $url = 'https://api.github.com/search/issues';
 
         $fullQuery = 'repo:' . $this->owner . '/' . $this->repo . ' ' . $queryString;
-
-        $response = Http::withHeaders($this->buildHeaders())
-            ->get($url, [
-                'q'       => $fullQuery,
-                'per_page' => 100,
+    
+        $allItems  = collect();
+        $page      = 1;
+        $perPage   = 100;
+    
+        do {
+            $response = Http::withHeaders($this->buildHeaders())->get($url, [
+                'q'        => $fullQuery,
+                'per_page' => $perPage,                'page'     => $page,
             ]);
+    
+            $response->throw();
 
-        $response->throw();
-
-        $json = $response->json();
-
-        return collect($json['items'] ?? []);
+            
+            $json  = $response->json();
+            $items = collect($json['items'] ?? []);
+    
+            $allItems = $allItems->merge($items);
+    
+            $hasMore = ($items->count() === $perPage);
+    
+            $page++;
+    
+        } while ($hasMore && $page <= 10);    
+        return $allItems;
     }
 
     protected function buildHeaders(): array
