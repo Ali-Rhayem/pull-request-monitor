@@ -22,10 +22,16 @@ class FetchPullRequests extends Command
 
     public function handle()
     {
+        // 1- List of all open pull requests created more than 14 days ago
         $Date14DaysAgo = Carbon::now()->subDays(14)->format('Y-m-d');
-        $queryString = sprintf('is:pr is:open created:<%s', $Date14DaysAgo);
+        $queryString = 'is:pr is:open created:<' . $Date14DaysAgo;
         $oldPullRequests = $this->github->searchPullRequests($queryString);
         $this->writeToFile('1-old-pull-requests.txt', $oldPullRequests);
+
+        // 2- List of all open pull requests with a review required:
+        $queryString = 'is:pr is:open review:required';
+        $pullRequestsWithReview = $this->github->searchPullRequests($queryString);
+        $this->writeToFile('2-pull-requests-with-review.txt', $pullRequestsWithReview);
 
         $this->info('pull request data has been fetched and written to text file!');
         return Command::SUCCESS;
