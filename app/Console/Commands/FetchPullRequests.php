@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Services\GithubApiService;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
+use Revolution\Google\Sheets\Facades\Sheets;
 
 class FetchPullRequests extends Command
 {
@@ -60,5 +61,22 @@ class FetchPullRequests extends Command
         })->implode("\n");
 
         file_put_contents($path, $lines);
+    }
+
+    protected function writeToGoogleSheet(string $sheetName, Collection $prs)
+    {
+        $rows = $prs->map(fn($pr) => [
+            $pr['number'],
+            $pr['title'],
+            $pr['html_url'],
+            $pr['created_at']
+        ])->toArray();
+
+        array_unshift($rows, ['PR Number', 'Title', 'URL', 'Created At']);
+
+        Sheets::spreadsheet(env('POST_SPREADSHEET_ID'))
+            ->sheet($sheetName)
+            ->range('A1')
+            ->append($rows);
     }
 }
