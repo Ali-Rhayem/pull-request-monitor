@@ -30,21 +30,25 @@ class FetchPullRequests extends Command
         $queryString = 'is:pr is:open created:<' . $Date14DaysAgo;
         $oldPullRequests = $this->github->searchPullRequests($queryString);
         $this->writeToFile('1-old-pull-requests.txt', $oldPullRequests);
+        $this->writeToGoogleSheet('Old Pull Requests', $oldPullRequests);
 
         // 2- List of all open pull requests with a review required:
         $queryString = 'is:pr is:open review:required';
         $pullRequestsWithReview = $this->github->searchPullRequests($queryString);
         $this->writeToFile('2-pull-requests-with-review.txt', $pullRequestsWithReview);
+        $this->writeToGoogleSheet('Pull Requests with Review Required', $pullRequestsWithReview);
 
         // 3- List of all open pull requests where review status is `success`:
         $queryString = 'is:pr is:open status:success';
         $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
         $this->writeToFile('3-pull-requests-with-success-status.txt', $pullRequestsWithSuccessStatus);
+        $this->writeToGoogleSheet('Pull Requests with Success Status', $pullRequestsWithSuccessStatus);
 
         // 4- List of all open pull requests with no reviews requested (no assigned reviewers)
         $queryString = 'is:pr is:open -review:required';
         $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
         $this->writeToFile('4-pull-requests-with-no-reviews-requested.txt', $pullRequestsWithSuccessStatus);
+        $this->writeToGoogleSheet('Pull Requests with No Reviews Requested', $pullRequestsWithSuccessStatus);
 
         $this->info('pull request data has been fetched and written to text file!');
         return Command::SUCCESS;
