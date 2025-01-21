@@ -7,6 +7,8 @@ use App\Services\GithubApiService;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 use Revolution\Google\Sheets\Facades\Sheets;
+use Google\Service\Sheets\BatchUpdateSpreadsheetRequest;
+use Google\Service\Sheets\Request as Google_Service_Sheets_Request;
 
 class FetchPullRequests extends Command
 {
@@ -65,18 +67,49 @@ class FetchPullRequests extends Command
 
     protected function writeToGoogleSheet(string $sheetName, Collection $prs)
     {
-        $rows = $prs->map(fn($pr) => [
-            $pr['number'],
-            $pr['title'],
-            $pr['html_url'],
-            $pr['created_at']
-        ])->toArray();
-
+        $spreadsheetId = env('POST_SPREADSHEET_ID');
+    
+        if ($prs->isEmpty()) {
+            $this->info("No pull requests found. Skipped writing to Google Sheet: '{$sheetName}'");
+            return;
+        }
+    
+        $service = Sheets::getService();
+    
+        $spreadsheet = $service->spreadsheets->get($spreadsheetId);
+        $sheetTitles = collect($spreadsheet->getSheets())->pluck('properties.title');
+    
+        if (!$sheetTitles->contains($sheetName)) {
+            $requests = [];
+    
+            $requests[] = new Google_Service_Sheets_Request([
+                'addSheet' => [
+                    'properties' => ['title' => $sheetName],
+                ],
+            ]);
+    
+            $body = new BatchUpdateSpreadsheetRequest(['requests' => $requests]);
+            $service->spreadsheets->batchUpdate($spreadsheetId, $body);
+    
+            $this->info("Created new sheet/tab named: {$sheetName}");
+        }
+    
+        $rows = $prs->map(function ($pr) {
+            return [
+                $pr['number'],
+                $pr['title'],
+                $pr['html_url'],
+                $pr['created_at'],
+            ];
+        })->toArray();
+    
         array_unshift($rows, ['PR Number', 'Title', 'URL', 'Created At']);
-
-        Sheets::spreadsheet(env('POST_SPREADSHEET_ID'))
+    
+        Sheets::spreadsheet($spreadsheetId)
             ->sheet($sheetName)
             ->range('A1')
             ->append($rows);
-    }
+    
+        $this->info("Appended " . count($rows) . " rows to sheet: '{$sheetName}'");
+    }    
 }
