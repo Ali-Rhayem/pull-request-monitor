@@ -38,6 +38,11 @@ class FetchPullRequests extends Command
         $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
         $this->writeToFile('3-pull-requests-with-success-status.txt', $pullRequestsWithSuccessStatus);
 
+        // 4- List of all open pull requests with no reviews requested (no assigned reviewers)
+        $queryString = 'is:pr is:open -review:required';
+        $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
+        $this->writeToFile('4-pull-requests-with-no-reviews-requested.txt', $pullRequestsWithSuccessStatus);
+
         $this->info('pull request data has been fetched and written to text file!');
         return Command::SUCCESS;
     }
