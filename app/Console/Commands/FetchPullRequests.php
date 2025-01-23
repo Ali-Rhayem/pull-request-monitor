@@ -25,33 +25,43 @@ class FetchPullRequests extends Command
 
     public function handle()
     {
-        // 1- List of all open pull requests created more than 14 days ago
-        $Date14DaysAgo = Carbon::now()->subDays(14)->format('Y-m-d');
-        $queryString = 'is:pr is:open created:<' . $Date14DaysAgo;
-        $oldPullRequests = $this->github->searchPullRequests($queryString);
-        $this->writeToFile('1-old-pull-requests.txt', $oldPullRequests);
-        $this->writeToGoogleSheet('Old Pull Requests', $oldPullRequests);
 
-        // 2- List of all open pull requests with a review required:
-        $queryString = 'is:pr is:open review:required';
-        $pullRequestsWithReview = $this->github->searchPullRequests($queryString);
-        $this->writeToFile('2-pull-requests-with-review.txt', $pullRequestsWithReview);
-        $this->writeToGoogleSheet('Pull Requests with Review Required', $pullRequestsWithReview);
+        $repositories = [
+            ['owner' => config('github.owner'), 'repo' => config('github.repo')],
+        ];
 
-        // 3- List of all open pull requests where review status is `success`:
-        $queryString = 'is:pr is:open status:success';
-        $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
-        $this->writeToFile('3-pull-requests-with-success-status.txt', $pullRequestsWithSuccessStatus);
-        $this->writeToGoogleSheet('Pull Requests with Success Status', $pullRequestsWithSuccessStatus);
+        foreach ($repositories as $repository) {
+            $owner = $repository['owner'];
+            $repo = $repository['repo'];
 
-        // 4- List of all open pull requests with no reviews requested (no assigned reviewers)
-        $queryString = 'is:pr is:open -review:required';
-        $pullRequestsWithSuccessStatus = $this->github->searchPullRequests($queryString);
-        $this->writeToFile('4-pull-requests-with-no-reviews-requested.txt', $pullRequestsWithSuccessStatus);
-        $this->writeToGoogleSheet('Pull Requests with No Reviews Requested', $pullRequestsWithSuccessStatus);
+            $this->info("Fetching pull requests for {$owner}/{$repo}...");
 
-        $this->info('pull request data has been fetched and written to text file!');
+            $this->fetchAndProcessPullRequests($owner, $repo, 'is:pr is:open created:<' . Carbon::now()->subDays(14)->format('Y-m-d'), 'Old Pull Requests', '1-old-pull-requests.txt');
+            $this->fetchAndProcessPullRequests($owner, $repo, 'is:pr is:open review:required', 'Pull Requests with Review Required', '2-pull-requests-with-review.txt');
+            $this->fetchAndProcessPullRequests($owner, $repo, 'is:pr is:open status:success', 'Pull Requests with Success Status', '3-pull-requests-with-success-status.txt');
+            $this->fetchAndProcessPullRequests($owner, $repo, 'is:pr is:open -review:required', 'Pull Requests with No Reviews Requested', '4-pull-requests-with-no-reviews-requested.txt');
+        }
+
+        $this->info('All pull request data has been fetched and written!');
         return Command::SUCCESS;
+    }
+
+    protected function fetchAndProcessPullRequests(string $owner, string $repo, string $queryString, string $sheetName, string $fileName): void
+    {
+        try {
+            $pullRequests = $this->github->searchPullRequests($owner, $repo, $queryString);
+
+            if ($pullRequests->isEmpty()) {
+                $this->info("No data found for {$owner}/{$repo} with query: {$queryString}");
+                return;
+            }
+
+            $this->writeToFile($fileName, $pullRequests);
+            $this->writeToGoogleSheet($sheetName, $pullRequests);
+
+        } catch (\Exception $e) {
+            $this->error("Error processing {$owner}/{$repo}: " . $e->getMessage());
+        }
     }
 
     protected function writeToFile(string $fileName, Collection $prs): void
@@ -69,35 +79,33 @@ class FetchPullRequests extends Command
         file_put_contents($path, $lines);
     }
 
-    protected function writeToGoogleSheet(string $sheetName, Collection $prs)
+    protected function writeToGoogleSheet(string $sheetName, Collection $prs): void
     {
         $spreadsheetId = env('POST_SPREADSHEET_ID');
-    
+
         if ($prs->isEmpty()) {
             $this->info("No pull requests found. Skipped writing to Google Sheet: '{$sheetName}'");
             return;
         }
-    
+
         $service = Sheets::getService();
-    
+
         $spreadsheet = $service->spreadsheets->get($spreadsheetId);
         $sheetTitles = collect($spreadsheet->getSheets())->pluck('properties.title');
-    
+
         if (!$sheetTitles->contains($sheetName)) {
-            $requests = [];
-    
             $requests[] = new Google_Service_Sheets_Request([
                 'addSheet' => [
                     'properties' => ['title' => $sheetName],
                 ],
             ]);
-    
+
             $body = new BatchUpdateSpreadsheetRequest(['requests' => $requests]);
             $service->spreadsheets->batchUpdate($spreadsheetId, $body);
-    
+
             $this->info("Created new sheet/tab named: {$sheetName}");
         }
-    
+
         $rows = $prs->map(function ($pr) {
             return [
                 $pr['number'],
@@ -106,14 +114,14 @@ class FetchPullRequests extends Command
                 $pr['created_at'],
             ];
         })->toArray();
-    
+
         array_unshift($rows, ['PR Number', 'Title', 'URL', 'Created At']);
-    
+
         Sheets::spreadsheet($spreadsheetId)
             ->sheet($sheetName)
             ->range('A1')
             ->append($rows);
-    
+
         $this->info("Appended " . count($rows) . " rows to sheet: '{$sheetName}'");
-    }    
+    }
 }
