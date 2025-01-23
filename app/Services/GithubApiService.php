@@ -7,30 +7,21 @@ use Illuminate\Support\Collection;
 
 class GithubApiService
 {
-    protected string $owner;
-    protected string $repo;
-
-    public function __construct()
-    {
-        $this->owner = config('github.owner');
-        $this->repo  = config('github.repo');
-    }
-
     /**
      * 
      * @param  string
      * @return Collection
      */
-    public function searchPullRequests(string $queryString): Collection
+    public function searchPullRequests(string $owner, string $repo, string $queryString): Collection
     {
         $url = 'https://api.github.com/search/issues';
 
-        $fullQuery = 'repo:' . $this->owner . '/' . $this->repo . ' ' . $queryString;
-    
+        $fullQuery = "repo:{$owner}/{$repo} " . $queryString;
+
         $allItems  = collect();
         $page      = 1;
         $perPage   = 100;
-    
+
         do {
             try {
                 $response = Http::withHeaders($this->buildHeaders())->get($url, [
@@ -55,31 +46,28 @@ class GithubApiService
                 $hasMore = ($items->count() === $perPage);
 
                 $page++;
-            }
-            catch (\Exception $e) {
+            } catch (\Exception $e) {
                 error_log('Error: ' . $e->getMessage());
                 break;
             }
-        } while ($hasMore && $page <= 10);    
+        } while ($hasMore && $page <= 10);
         return $allItems;
     }
 
     protected function buildHeaders(): array
     {
-        $headers = [
-            'Accept' => 'application/vnd.github+json',
-            'Authorization' => 'Bearer ' . config('github.token'),
-        ];
+        $token = config('github.token');
 
-        return $headers;
+        if (empty($token)) {
+            throw new \Exception('GitHub token is not set in the configuration.');
+        }
+
+        return [
+            'Accept' => 'application/vnd.github+json',
+            'Authorization' => 'Bearer ' . $token,
+        ];
     }
 
-        /**
-     * Check if the response indicates a rate limit issue.
-     *
-     * @param \Illuminate\Http\Client\Response $response
-     * @return bool
-     */
     protected function isRateLimited($response): bool
     {
         return $response->status() === 403 && str_contains($response->header('X-RateLimit-Remaining', ''), '0');
