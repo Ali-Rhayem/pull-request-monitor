@@ -32,24 +32,34 @@ class GithubApiService
         $perPage   = 100;
     
         do {
-            $response = Http::withHeaders($this->buildHeaders())->get($url, [
-                'q'        => $fullQuery,
-                'per_page' => $perPage,
-                'page'     => $page,
-            ]);
-    
-            $response->throw();
+            try {
+                $response = Http::withHeaders($this->buildHeaders())->get($url, [
+                    'q'        => $fullQuery,
+                    'per_page' => $perPage,
+                    'page'     => $page,
+                ]);
 
-            
-            $json  = $response->json();
-            $items = collect($json['items'] ?? []);
-    
-            $allItems = $allItems->merge($items);
-    
-            $hasMore = ($items->count() === $perPage);
-    
-            $page++;
-    
+                if ($response->status() === 403 && $this->isRateLimited($response)) {
+                    $retryAfter = $response->header('Retry-After', 60);
+                    sleep($retryAfter);
+                    continue;
+                }
+
+                $response->throw();
+
+                $json  = $response->json();
+                $items = collect($json['items'] ?? []);
+
+                $allItems = $allItems->merge($items);
+
+                $hasMore = ($items->count() === $perPage);
+
+                $page++;
+            }
+            catch (\Exception $e) {
+                error_log('Error: ' . $e->getMessage());
+                break;
+            }
         } while ($hasMore && $page <= 10);    
         return $allItems;
     }
@@ -58,8 +68,20 @@ class GithubApiService
     {
         $headers = [
             'Accept' => 'application/vnd.github+json',
+            'Authorization' => 'Bearer ' . config('github.token'),
         ];
 
         return $headers;
+    }
+
+        /**
+     * Check if the response indicates a rate limit issue.
+     *
+     * @param \Illuminate\Http\Client\Response $response
+     * @return bool
+     */
+    protected function isRateLimited($response): bool
+    {
+        return $response->status() === 403 && str_contains($response->header('X-RateLimit-Remaining', ''), '0');
     }
 }
