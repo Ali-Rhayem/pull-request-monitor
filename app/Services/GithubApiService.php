@@ -34,7 +34,8 @@ class GithubApiService
         do {
             $response = Http::withHeaders($this->buildHeaders())->get($url, [
                 'q'        => $fullQuery,
-                'per_page' => $perPage,                'page'     => $page,
+                'per_page' => $perPage,
+                'page'     => $page,
             ]);
     
             $response->throw();
