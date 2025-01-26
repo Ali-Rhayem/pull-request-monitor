@@ -3,9 +3,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Services\GithubApiService;
-use Illuminate\Support\Collection;
-use Carbon\Carbon;
 use App\Jobs\ProcessPullRequestsJob;
 
 class FetchPullRequests extends Command
